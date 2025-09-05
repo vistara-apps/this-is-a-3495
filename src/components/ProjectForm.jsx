@@ -1,7 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Building, MapPin, Calendar } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Building, MapPin, Calendar, AlertCircle } from 'lucide-react'
 import { useProject } from '../contexts/ProjectContext'
+import { useAuth } from '../contexts/AuthContext'
+import subscriptionService from '../services/subscriptionService'
 
 const buildingTypes = [
   'Office Building',
@@ -35,6 +37,7 @@ const roomTypes = [
 export default function ProjectForm() {
   const navigate = useNavigate()
   const { createProject } = useProject()
+  const { user } = useAuth()
   
   const [formData, setFormData] = useState({
     projectName: '',
@@ -46,6 +49,24 @@ export default function ProjectForm() {
   const [spaceRequirements, setSpaceRequirements] = useState([
     { roomType: '', squareFootage: '', quantity: 1 }
   ])
+  
+  const [usage, setUsage] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (user) {
+      loadUsage()
+    }
+  }, [user])
+
+  const loadUsage = async () => {
+    try {
+      const userUsage = await subscriptionService.getUserUsage(user.userID)
+      setUsage(userUsage)
+    } catch (error) {
+      console.error('Failed to load usage:', error)
+    }
+  }
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -70,10 +91,20 @@ export default function ProjectForm() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    setError('')
+    
+    // Check subscription limits
+    if (user && usage) {
+      const permission = subscriptionService.canPerformAction(user, 'CREATE_PROJECT', usage)
+      if (!permission.allowed) {
+        setError(permission.message)
+        return
+      }
+    }
     
     // Validate required fields
     if (!formData.projectName || !formData.buildingType || !formData.location || !formData.schedule) {
-      alert('Please fill in all project details')
+      setError('Please fill in all project details')
       return
     }
 
@@ -83,18 +114,24 @@ export default function ProjectForm() {
     )
     
     if (validSpaceReqs.length === 0) {
-      alert('Please add at least one space requirement')
+      setError('Please add at least one space requirement')
       return
     }
 
     // Create project
     const projectData = {
       ...formData,
-      userID: '1', // This would come from auth context in a real app
+      userID: user?.userID || '1',
       spaceRequirements: validSpaceReqs
     }
 
     const newProject = createProject(projectData)
+    
+    // Update usage statistics
+    if (user) {
+      subscriptionService.updateUsage(user.userID, 'PROJECT_CREATED')
+    }
+    
     navigate(`/project/${newProject.projectID}/generate`)
   }
 
@@ -289,6 +326,16 @@ export default function ProjectForm() {
             Add Space Requirement
           </button>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center">
+              <AlertCircle className="h-4 w-4 mr-2" />
+              {error}
+            </div>
+          </div>
+        )}
 
         {/* Submit Button */}
         <div className="flex justify-end space-x-4">

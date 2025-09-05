@@ -1,20 +1,26 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Zap, Download, BarChart3, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Zap, Download, BarChart3, RefreshCw, AlertCircle } from 'lucide-react'
 import { useProject } from '../contexts/ProjectContext'
+import { useAuth } from '../contexts/AuthContext'
 import LayoutPreview from './LayoutPreview'
 import { generateLayouts } from '../services/layoutService'
+import subscriptionService from '../services/subscriptionService'
+import exportService from '../services/exportService'
 
 export default function LayoutGenerator() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { getProject, addLayouts } = useProject()
+  const { user } = useAuth()
   
   const [project, setProject] = useState(null)
   const [layouts, setLayouts] = useState([])
   const [selectedLayout, setSelectedLayout] = useState(null)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
+  const [usage, setUsage] = useState(null)
+  const [exportFormat, setExportFormat] = useState('PNG')
 
   useEffect(() => {
     const projectData = getProject(id)
@@ -24,10 +30,31 @@ export default function LayoutGenerator() {
     }
     setProject(projectData)
     setLayouts(projectData.layouts || [])
-  }, [id, getProject, navigate])
+    
+    // Load user usage data
+    if (user) {
+      loadUsage()
+    }
+  }, [id, getProject, navigate, user])
+
+  const loadUsage = async () => {
+    try {
+      const userUsage = await subscriptionService.getUserUsage(user.userID)
+      setUsage(userUsage)
+    } catch (error) {
+      console.error('Failed to load usage:', error)
+    }
+  }
 
   const handleGenerateLayouts = async () => {
-    if (!project) return
+    if (!project || !user) return
+    
+    // Check subscription limits
+    const permission = subscriptionService.canPerformAction(user, 'GENERATE_LAYOUT', usage)
+    if (!permission.allowed) {
+      setError(permission.message)
+      return
+    }
     
     setGenerating(true)
     setError('')
@@ -37,6 +64,10 @@ export default function LayoutGenerator() {
       setLayouts(newLayouts)
       addLayouts(project.projectID, newLayouts)
       
+      // Update usage statistics
+      subscriptionService.updateUsage(user.userID, 'LAYOUT_GENERATED')
+      await loadUsage() // Refresh usage data
+      
       if (newLayouts.length > 0) {
         setSelectedLayout(newLayouts[0])
       }
@@ -45,6 +76,17 @@ export default function LayoutGenerator() {
       setError('Failed to generate layouts. Please try again.')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const handleExportLayout = async () => {
+    if (!selectedLayout || !user) return
+    
+    try {
+      await exportService.exportLayout(selectedLayout, exportFormat, user)
+    } catch (err) {
+      console.error('Export failed:', err)
+      setError(err.message)
     }
   }
 
@@ -177,20 +219,76 @@ export default function LayoutGenerator() {
                 </div>
 
                 {selectedLayout && (
-                  <button className="w-full mt-4 bg-green-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center">
-                    <Download className="h-4 w-4 mr-2" />
-                    Export Selected Layout
-                  </button>
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Export Format
+                      </label>
+                      <select
+                        value={exportFormat}
+                        onChange={(e) => setExportFormat(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        {user && exportService.getAvailableFormats(user).map(format => (
+                          <option key={format} value={format}>
+                            {exportService.getFormatDetails(format)?.name || format}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button 
+                      onClick={handleExportLayout}
+                      className="w-full bg-green-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center justify-center"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Export as {exportFormat}
+                    </button>
+                  </div>
                 )}
               </div>
             )}
 
             {error && (
               <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
+                <div className="flex items-center">
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  {error}
+                </div>
               </div>
             )}
           </div>
+
+          {/* Subscription Usage */}
+          {usage && user && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Usage Limits</h3>
+              {(() => {
+                const tier = subscriptionService.getTierDetails(user.subscriptionTier)
+                const displays = subscriptionService.formatUsageDisplay(usage, tier)
+                return displays.map((display, index) => (
+                  <div key={index} className="mb-4 last:mb-0">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">{display.label}</span>
+                      <span className="text-sm text-gray-600">
+                        {display.current} / {display.limit === -1 ? '∞' : display.limit}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          display.percentage > 80 ? 'bg-red-500' :
+                          display.percentage > 60 ? 'bg-yellow-500' :
+                          'bg-green-500'
+                        }`}
+                        style={{ width: `${Math.min(display.percentage, 100)}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{display.percentage}% used</p>
+                  </div>
+                ))
+              })()}
+            </div>
+          )}
 
           {/* Space Requirements Summary */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
