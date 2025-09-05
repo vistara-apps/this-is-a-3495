@@ -23,9 +23,9 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-secondary">
       <Header />
-      <main className="pt-16">
+      <main className="pt-18">
         <Routes>
           <Route 
             path="/" 
