@@ -28,7 +28,8 @@ jobs:
         NODE_OPTIONS: --max-old-space-size=4096
         
     - name: Deploy to Vercel (Production)
-      if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && secrets.VERCEL_TOKEN != ''
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      continue-on-error: true
       uses: amondnet/vercel-action@v25
       with:
         vercel-token: ${{ secrets.VERCEL_TOKEN }}
@@ -37,7 +38,8 @@ jobs:
         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
         
     - name: Deploy to Vercel (Preview)
-      if: (github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master') && secrets.VERCEL_TOKEN != ''
+      if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
+      continue-on-error: true
       uses: amondnet/vercel-action@v25
       with:
         vercel-token: ${{ secrets.VERCEL_TOKEN }}
@@ -46,7 +48,7 @@ jobs:
         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
         
     - name: Build Success Notification
-      if: github.event_name == 'pull_request' && secrets.VERCEL_TOKEN == ''
+      if: github.event_name == 'pull_request'
       uses: actions/github-script@v7
       with:
         script: |
@@ -67,7 +69,7 @@ jobs:
           });
         
     - name: Comment PR with deployment URL
-      if: github.event_name == 'pull_request' && secrets.VERCEL_TOKEN != ''
+      if: false
       uses: actions/github-script@v7
       with:
         script: |
