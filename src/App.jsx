@@ -5,6 +5,7 @@ import LoginForm from './components/LoginForm'
 import Dashboard from './components/Dashboard'
 import ProjectForm from './components/ProjectForm'
 import LayoutGenerator from './components/LayoutGenerator'
+import UserProfile from './components/UserProfile'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ProjectProvider } from './contexts/ProjectContext'
 
@@ -42,6 +43,10 @@ function AppContent() {
           <Route 
             path="/project/:id/generate" 
             element={user ? <LayoutGenerator /> : <Navigate to="/" />} 
+          />
+          <Route 
+            path="/profile" 
+            element={user ? <UserProfile /> : <Navigate to="/" />} 
           />
         </Routes>
       </main>

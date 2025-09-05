@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Building2, LogOut, User } from 'lucide-react'
+import { Building2, LogOut, User, Settings } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Header() {
@@ -33,6 +33,13 @@ export default function Header() {
                   {user.subscriptionTier}
                 </span>
               </div>
+              <Link
+                to="/profile"
+                className="flex items-center space-x-1 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <Settings className="h-4 w-4" />
+                <span className="hidden sm:inline">Profile</span>
+              </Link>
               <button
                 onClick={handleLogout}
                 className="flex items-center space-x-1 text-gray-600 hover:text-gray-900 transition-colors"
